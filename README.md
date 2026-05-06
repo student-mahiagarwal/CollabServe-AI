@@ -1,6 +1,6 @@
 # CollabServe AI
 
-Realtime MERN workspace inspired by the SOEN project video: auth, projects, collaborators, Socket.IO chat, `@ai` code generation, editable file trees, and WebContainer preview.
+Realtime MERN workspace For code editors: auth, projects, collaborators, Socket.IO chat, `@ai` code generation, editable file trees, and WebContainer preview.
 
 ## Setup
 
