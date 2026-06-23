@@ -1,52 +1,6 @@
 # CollabServe AI
 
-CollabServe AI is a full-stack realtime coding workspace built with React, Vite, Tailwind CSS, Express, MongoDB, Socket.IO, JWT authentication, and Gemini-powered code assistance.
-
-The application supports account registration and login, protected project dashboards, collaborative project membership, realtime chat, `@ai` file generation, editable file trees, WebContainer execution, terminal output, and browser preview.
-
-## Features
-
-- JWT-based registration, login, profile bootstrapping, and logout token blacklisting.
-- Project dashboard with search, project metrics, empty states, loading states, and error messages.
-- Project-level collaboration using MongoDB project membership.
-- Owner-only collaborator management for role-based access control.
-- Socket.IO rooms scoped by authenticated project access.
-- Gemini backend integration for JSON-based AI file generation.
-- Browser-side file editing with saved project file trees.
-- WebContainer mounting, install, run, terminal output, and iframe preview.
-- Responsive layouts for dashboard and project workspace views.
-
-## Tech Stack
-
-- Frontend: React 19, Vite, Tailwind CSS, lucide-react, socket.io-client, axios, markdown-to-jsx, highlight.js, WebContainer API.
-- Backend: Node.js, Express 5, MongoDB, Mongoose, Socket.IO, JWT, bcrypt, express-validator, cookie-parser, morgan.
-- Optional services: Redis for logout blacklist persistence, Gemini API for AI responses.
-
-## Project Structure
-
-```text
-FinalProject/
-  backend/
-    app.js
-    server.js
-    controllers/
-    db/
-    middleware/
-    models/
-    routes/
-    services/
-  frontend/
-    index.html
-    src/
-      config/
-      context/
-      routes/
-      screens/
-  .env.example
-  .gitignore
-  package.json
-  README.md
-```
+Realtime MERN workspace For code editors: auth, projects, collaborators, Socket.IO chat, `@ai` code generation, editable file trees, and WebContainer preview.
 
 ## Setup
 
