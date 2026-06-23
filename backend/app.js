@@ -29,6 +29,7 @@ function getAllowedOrigins() {
 
 const allowedOrigins = new Set([
     ...getAllowedOrigins(),
+    'https://collab-serve-ai-fcn3.vercel.app',
 ]);
 
 app.use(cors({
