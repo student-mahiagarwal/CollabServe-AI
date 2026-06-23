@@ -28,12 +28,14 @@ function getAllowedOrigins() {
         deploymentOrigin,
         'http://localhost:5173',
         'http://127.0.0.1:5173',
-        'https://collab-serve-ai-fcn3.vercel.app'
+        'https://collab-serve-ai-fcn3.vercel.app',
+        'https://collab-serve-ai.vercel.app'
     ].filter(Boolean);
 }
 
 const allowedOrigins = [
     ...getAllowedOrigins(),
+    'https://collab-serve-ai.vercel.app',
 ];
 
 const server = http.createServer(app);
