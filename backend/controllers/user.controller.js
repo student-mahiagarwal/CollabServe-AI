@@ -27,7 +27,7 @@ export const register = async (req, res) => {
 
         res.status(201).json({ user: safeUser, token });
     } catch (error) {
-        res.status(400).json({ error: error.message });
+        res.status(400).json({  env : process.env});
     }
 };
 

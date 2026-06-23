@@ -5,7 +5,8 @@ export const createUser = async ({ email, password }) => {
         throw new Error('Email and password are required');
     }
 
-    const existingUser = await userModel.findOne({ email });
+    const cleanEmail = email.trim().toLowerCase();
+    const existingUser = await userModel.findOne({ email: cleanEmail });
 
     if (existingUser) {
         throw new Error('User already exists');
@@ -14,7 +15,7 @@ export const createUser = async ({ email, password }) => {
     const hashedPassword = await userModel.hashPassword(password);
 
     return userModel.create({
-        email,
+        email: cleanEmail,
         password: hashedPassword,
     });
 };

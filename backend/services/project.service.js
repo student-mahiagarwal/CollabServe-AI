@@ -56,6 +56,12 @@ export const addUsersToProject = async ({ projectId, users, userId }) => {
         throw new Error('User does not belong to this project');
     }
 
+    if (project.owner.toString() !== userId.toString()) {
+        const error = new Error('Only the project owner can add collaborators');
+        error.status = 403;
+        throw error;
+    }
+
     return projectModel
         .findByIdAndUpdate(
             projectId,

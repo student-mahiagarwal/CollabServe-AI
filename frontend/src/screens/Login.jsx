@@ -4,6 +4,24 @@ import { useState, useEffect } from 'react';
 import axios from '../config/axios.js';
 import { useUser } from '../context/UserContext.jsx';
 
+function getAuthError(error) {
+    const data = error.response?.data;
+
+    if (data?.error) {
+        return data.error;
+    }
+
+    if (Array.isArray(data?.errors) && data.errors.length > 0) {
+        return data.errors.map(nextError => nextError.msg).join(', ');
+    }
+
+    if (error.code === 'ERR_NETWORK') {
+        return 'Backend is not reachable. Check VITE_API_URL and make sure the API server is running.';
+    }
+
+    return error.message || 'Authentication failed';
+}
+
 export default function Login() {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
@@ -57,7 +75,7 @@ export default function Login() {
             setUser(res.data.user);
             navigate('/');
         } catch (err) {
-            setError(err.response?.data?.error || 'Authentication failed');
+            setError(getAuthError(err));
         } finally {
             setLoading(false);
         }
@@ -152,6 +170,7 @@ export default function Login() {
                                     value={password}
                                     onChange={e => setPassword(e.target.value)}
                                     type="password"
+                                    minLength={6}
                                     placeholder="••••••••"
                                     className="mt-1 w-full rounded-md border border-emerald-500/20 bg-black px-3 py-2 text-emerald-300 outline-none focus:border-emerald-400 focus:shadow-[0_0_12px_rgba(16,185,129,0.6)]"
                                     required

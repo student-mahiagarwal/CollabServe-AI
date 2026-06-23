@@ -25,7 +25,7 @@ export const createProject = async (req, res) => {
 
         res.status(201).json({ project });
     } catch (error) {
-        res.status(400).json({ error: error.message });
+        res.status(error.status || 400).json({ error: error.message });
     }
 };
 
@@ -37,7 +37,7 @@ export const getAllProjects = async (req, res) => {
 
         res.status(200).json({ projects });
     } catch (error) {
-        res.status(400).json({ error: error.message });
+        res.status(error.status || 400).json({ error: error.message });
     }
 };
 
@@ -55,7 +55,7 @@ export const addUserToProject = async (req, res) => {
 
         res.status(200).json({ project });
     } catch (error) {
-        res.status(400).json({ error: error.message });
+        res.status(error.status || 400).json({ error: error.message });
     }
 };
 

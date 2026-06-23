@@ -1,9 +1,11 @@
 import { Router } from 'express';
 import { body } from 'express-validator';
+import mongoose from 'mongoose';
 import * as projectController from '../controllers/project.controller.js';
 import * as authMiddleware from '../middleware/auth.middleware.js';
 
 const router = Router();
+const isObjectId = value => mongoose.Types.ObjectId.isValid(value);
 
 router.post(
     '/create',
@@ -17,9 +19,9 @@ router.get('/all', authMiddleware.authUser, projectController.getAllProjects);
 router.put(
     '/add-user',
     authMiddleware.authUser,
-    body('projectId').isString().withMessage('Project ID is required'),
+    body('projectId').custom(isObjectId).withMessage('Valid project ID is required'),
     body('users').isArray({ min: 1 }).withMessage('Users must be an array'),
-    body('users.*').isString().withMessage('Each user must be a string'),
+    body('users.*').custom(isObjectId).withMessage('Each user must be a valid user ID'),
     projectController.addUserToProject
 );
 
@@ -32,7 +34,7 @@ router.get(
 router.put(
     '/update-file-tree',
     authMiddleware.authUser,
-    body('projectId').isString().withMessage('Project ID is required'),
+    body('projectId').custom(isObjectId).withMessage('Valid project ID is required'),
     body('fileTree').isObject().withMessage('File tree is required'),
     projectController.updateFileTree
 );

@@ -28,6 +28,6 @@ export const authUser = async (req, res, next) => {
         req.token = token;
         return next();
     } catch (error) {
-        return res.status(401).json({ error: 'Unauthorized user' });
+        return res.status(500).json({ error: 'Internal Server Error' });
     }
 };

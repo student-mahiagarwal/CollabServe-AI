@@ -31,20 +31,24 @@ function createMemoryClient() {
 }
 
 function createRedisClient() {
+    const options = {
+        maxRetriesPerRequest: 1,
+        lazyConnect: true,
+        enableOfflineQueue: false,
+        connectTimeout: 1000,
+        retryStrategy: () => null,
+    };
+
     if (process.env.REDIS_URL) {
-        return new Redis(process.env.REDIS_URL, {
-            maxRetriesPerRequest: 1,
-            lazyConnect: true,
-        });
+        return new Redis(process.env.REDIS_URL, options);
     }
 
     if (process.env.REDIS_HOST && process.env.REDIS_PORT) {
         return new Redis({
+            ...options,
             host: process.env.REDIS_HOST,
             port: Number(process.env.REDIS_PORT),
             password: process.env.REDIS_PASSWORD || undefined,
-            maxRetriesPerRequest: 1,
-            lazyConnect: true,
         });
     }
 

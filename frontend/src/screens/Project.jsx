@@ -5,17 +5,19 @@ import hljs from 'highlight.js';
 import {
     ArrowLeft,
     Bot,
+    CircleAlert,
+    FilePlus,
     Folder,
+    Loader2,
     Play,
-    Plus,        // ➕ for collaborator
-    FilePlus,    // 📄➕ for file
+    Plus,
     Send,
     UserPlus,
     Users,
     X,
 } from 'lucide-react';
 import axios from '../config/axios.js';
-import { disconnectSocket, initializeSocket, receiveMessage, sendMessage } from '../config/socket.js';
+import { disconnectSocket, initializeSocket, isRealtimeEnabled, receiveMessage, sendMessage } from '../config/socket.js';
 import { getWebContainer } from '../config/webcontainer.js';
 import { useUser } from '../context/UserContext.jsx';
 
@@ -49,6 +51,10 @@ function toWebContainerTree(flatTree) {
     });
 
     return root;
+}
+
+function getOwnerId(project) {
+    return project?.owner?._id || project?.owner || '';
 }
 
 function CodeBlock(props) {
@@ -102,32 +108,25 @@ export default function Project() {
     const [ runProcess, setRunProcess ] = useState(null);
     const [ terminalOutput, setTerminalOutput ] = useState('');
     const [ loading, setLoading ] = useState(true);
+    const [ savingMembers, setSavingMembers ] = useState(false);
     const [ error, setError ] = useState('');
 
     const fileNames = useMemo(() => Object.keys(fileTree), [ fileTree ]);
+    const ownerId = String(getOwnerId(project));
+    const isOwner = Boolean(project && user?._id && ownerId === String(user._id));
+
+    const memberIds = useMemo(() => (
+        new Set((project?.users || []).map(member => String(member._id || member)))
+    ), [ project ]);
+
+    const eligibleUsers = useMemo(() => (
+        users.filter(nextUser => !memberIds.has(String(nextUser._id)))
+    ), [ memberIds, users ]);
 
     const openFile = useCallback(fileName => {
-    setCurrentFile(fileName);
-    setOpenFiles(prev => Array.from(new Set([ ...prev, fileName ])));
-}, []);
-
-// 👇 ADD HERE
-const handleAddFile = () => {
-    const fileName = prompt("Enter file name (e.g. index.html)");
-
-    if (!fileName) return;
-
-    const newFileTree = {
-        ...fileTree,
-        [fileName]: {
-            file: { contents: "" }
-        }
-    };
-
-    setFileTree(newFileTree);
-    saveFileTree(newFileTree);
-    openFile(fileName);
-};
+        setCurrentFile(fileName);
+        setOpenFiles(prev => Array.from(new Set([ ...prev, fileName ])));
+    }, []);
 
     const saveFileTree = useCallback(async nextFileTree => {
         if (!projectId) {
@@ -144,6 +143,65 @@ const handleAddFile = () => {
         }
     }, [ projectId ]);
 
+    const applyAiResult = useCallback(result => {
+        const aiMessage = {
+            message: result,
+            sender: {
+                _id: 'ai',
+                email: 'AI',
+            },
+            createdAt: new Date().toISOString(),
+        };
+
+        setMessages(prev => [ ...prev, aiMessage ]);
+
+        try {
+            const parsed = JSON.parse(result);
+
+            if (parsed.fileTree && Object.keys(parsed.fileTree).length > 0) {
+                setFileTree(prev => {
+                    const nextTree = { ...prev, ...parsed.fileTree };
+                    saveFileTree(nextTree);
+
+                    const nextFirstFile = Object.keys(parsed.fileTree)[ 0 ];
+                    if (nextFirstFile) {
+                        openFile(nextFirstFile);
+                    }
+
+                    return nextTree;
+                });
+            }
+        } catch (parseError) {
+            console.warn(parseError);
+        }
+    }, [ openFile, saveFileTree ]);
+
+    const handleAddFile = useCallback(() => {
+        const typedName = window.prompt('Enter file name, for example index.html');
+        const fileName = typedName?.trim().replace(/^\/+/, '');
+
+        if (!fileName) {
+            return;
+        }
+
+        if (fileTree[ fileName ]) {
+            setError('A file with that name already exists');
+            openFile(fileName);
+            return;
+        }
+
+        const nextFileTree = {
+            ...fileTree,
+            [ fileName ]: {
+                file: { contents: '' },
+            },
+        };
+
+        setFileTree(nextFileTree);
+        saveFileTree(nextFileTree);
+        openFile(fileName);
+    }, [ fileTree, openFile, saveFileTree ]);
+
     useEffect(() => {
         async function boot() {
             try {
@@ -153,41 +211,28 @@ const handleAddFile = () => {
                 ]);
 
                 const nextProject = projectRes.data.project;
+                const nextFileTree = nextProject.fileTree || {};
+
                 setProject(nextProject);
                 setUsers(usersRes.data.users);
-                setFileTree(nextProject.fileTree || {});
+                setFileTree(nextFileTree);
 
-                const firstFile = Object.keys(nextProject.fileTree || {})[ 0 ];
+                const firstFile = Object.keys(nextFileTree)[ 0 ];
                 if (firstFile) {
                     openFile(firstFile);
                 }
 
-                initializeSocket(projectId);
-                receiveMessage('project-message', data => {
-                    setMessages(prev => [ ...prev, data ]);
-
-                    if (data.sender?._id === 'ai') {
-                        try {
-                            const parsed = JSON.parse(data.message);
-
-                            if (parsed.fileTree && Object.keys(parsed.fileTree).length > 0) {
-                                setFileTree(prev => {
-                                    const nextTree = { ...prev, ...parsed.fileTree };
-                                    saveFileTree(nextTree);
-                                    const nextFirstFile = Object.keys(parsed.fileTree)[ 0 ];
-
-                                    if (nextFirstFile) {
-                                        openFile(nextFirstFile);
-                                    }
-
-                                    return nextTree;
-                                });
-                            }
-                        } catch (parseError) {
-                            console.warn(parseError);
+                if (isRealtimeEnabled()) {
+                    initializeSocket(projectId);
+                    receiveMessage('project-message', data => {
+                        if (data.sender?._id === 'ai') {
+                            applyAiResult(data.message);
+                            return;
                         }
-                    }
-                });
+
+                        setMessages(prev => [ ...prev, data ]);
+                    });
+                }
 
                 getWebContainer()
                     .then(setWebContainer)
@@ -204,7 +249,7 @@ const handleAddFile = () => {
         return () => {
             disconnectSocket();
         };
-    }, [ openFile, projectId, saveFileTree ]);
+    }, [ applyAiResult, openFile, projectId, saveFileTree ]);
 
     useEffect(() => {
         if (messageBoxRef.current) {
@@ -227,6 +272,14 @@ const handleAddFile = () => {
     }
 
     async function addCollaborators() {
+        if (!isOwner) {
+            setError('Only the project owner can add collaborators');
+            return;
+        }
+
+        setSavingMembers(true);
+        setError('');
+
         try {
             const res = await axios.put('/projects/add-user', {
                 projectId,
@@ -238,10 +291,12 @@ const handleAddFile = () => {
             setIsCollaboratorModalOpen(false);
         } catch (err) {
             setError(err.response?.data?.error || 'Could not add collaborators');
+        } finally {
+            setSavingMembers(false);
         }
     }
 
-    function submitMessage(event) {
+    async function submitMessage(event) {
         event.preventDefault();
 
         if (!message.trim()) {
@@ -254,9 +309,23 @@ const handleAddFile = () => {
             createdAt: new Date().toISOString(),
         };
 
-        sendMessage('project-message', nextMessage);
+        const deliveredRealtime = sendMessage('project-message', nextMessage);
         setMessages(prev => [ ...prev, nextMessage ]);
         setMessage('');
+
+        if (!deliveredRealtime && message.includes('@ai')) {
+            try {
+                const prompt = message.replace('@ai', '').trim();
+                const res = await axios.post('/ai/get-result', { prompt });
+                applyAiResult(res.data.result);
+            } catch (err) {
+                const fallback = JSON.stringify({
+                    text: err.response?.data?.error || 'AI request failed. Please check the backend configuration.',
+                    fileTree: {},
+                });
+                applyAiResult(fallback);
+            }
+        }
     }
 
     function updateCurrentFile(contents) {
@@ -272,82 +341,89 @@ const handleAddFile = () => {
     }
 
     async function runProject() {
-    if (!webContainer || fileNames.length === 0) {
-        return;
+        if (!webContainer || fileNames.length === 0) {
+            return;
+        }
+
+        try {
+            setTerminalOutput('Mounting files...\n');
+            await webContainer.mount(toWebContainerTree(fileTree));
+
+            let packageJson = {};
+            try {
+                packageJson = JSON.parse(getFileContent(fileTree, 'package.json') || '{}');
+            } catch {
+                setTerminalOutput(prev => `${prev}package.json is not valid JSON.\n`);
+            }
+
+            if (packageJson.dependencies || packageJson.devDependencies) {
+                setTerminalOutput(prev => `${prev}Installing dependencies...\n`);
+                const installProcess = await webContainer.spawn('npm', [ 'install' ]);
+
+                installProcess.output.pipeTo(new WritableStream({
+                    write(chunk) {
+                        setTerminalOutput(prev => `${prev}${chunk}`);
+                    },
+                }));
+
+                await installProcess.exit;
+            }
+
+            if (runProcess) {
+                runProcess.kill();
+            }
+
+            const startScript = packageJson.scripts?.dev
+                ? 'dev'
+                : packageJson.scripts?.start
+                    ? 'start'
+                    : null;
+
+            let nextRunProcess;
+
+            if (currentFile?.endsWith('.js')) {
+                setTerminalOutput(prev => `${prev}\nRunning ${currentFile} with node...\n`);
+                nextRunProcess = await webContainer.spawn('node', [ currentFile ]);
+            } else if (startScript) {
+                setTerminalOutput(prev => `${prev}\nRunning npm run ${startScript}...\n`);
+                nextRunProcess = await webContainer.spawn('npm', [ 'run', startScript ]);
+            } else {
+                setTerminalOutput(prev => `${prev}\nNo runnable JavaScript file or package script found.\n`);
+                return;
+            }
+
+            nextRunProcess.output.pipeTo(new WritableStream({
+                write(chunk) {
+                    setTerminalOutput(prev => `${prev}${chunk}`);
+                },
+            }));
+
+            setRunProcess(nextRunProcess);
+
+            webContainer.on('server-ready', (port, url) => {
+                setTerminalOutput(prev => `${prev}\nServer ready on ${port}: ${url}\n`);
+                setIframeUrl(url);
+            });
+        } catch (err) {
+            setTerminalOutput(prev => `${prev}\nRun failed: ${err.message}\n`);
+        }
     }
 
-    setTerminalOutput('Mounting files...\n');
-    await webContainer.mount(toWebContainerTree(fileTree));
-
-    const packageJson = JSON.parse(getFileContent(fileTree, 'package.json') || '{}');
-
-    const installCommand = packageJson.dependencies || packageJson.devDependencies
-        ? ['npm', ['install']]
-        : null;
-
-    const startScript = packageJson.scripts?.dev
-        ? 'dev'
-        : packageJson.scripts?.start
-        ? 'start'
-        : null;
-
-    // ✅ INSTALL
-    if (installCommand) {
-        setTerminalOutput(prev => `${prev}Installing dependencies...\n`);
-        const installProcess = await webContainer.spawn(installCommand[0], installCommand[1]);
-
-        installProcess.output.pipeTo(new WritableStream({
-            write(chunk) {
-                setTerminalOutput(prev => `${prev}${chunk}`);
-            },
-        }));
-
-        await installProcess.exit;
+    if (loading) {
+        return (
+            <main className="grid min-h-screen place-items-center bg-stone-100 text-stone-700">
+                <div className="flex items-center gap-3">
+                    <Loader2 className="animate-spin" size={18} />
+                    Loading workspace...
+                </div>
+            </main>
+        );
     }
-
-    // ✅ KILL PREVIOUS PROCESS
-    if (runProcess) {
-        runProcess.kill();
-    }
-
-    let nextRunProcess;
-
-    // 🔥 SMART RUN LOGIC
-    if (currentFile?.endsWith(".js")) {
-        setTerminalOutput(prev => `${prev}\nRunning ${currentFile} with node...\n`);
-
-        nextRunProcess = await webContainer.spawn("node", [currentFile]);
-    }
-    else if (startScript) {
-        setTerminalOutput(prev => `${prev}\nRunning npm ${startScript}...\n`);
-
-        nextRunProcess = await webContainer.spawn("npm", ["run", startScript]);
-    }
-    else {
-        setTerminalOutput(prev => `${prev}\nNo runnable file or script found`);
-        return;
-    }
-
-    // ✅ OUTPUT STREAM
-    nextRunProcess.output.pipeTo(new WritableStream({
-        write(chunk) {
-            setTerminalOutput(prev => `${prev}${chunk}`);
-        },
-    }));
-
-    setRunProcess(nextRunProcess);
-
-    // ✅ SERVER READY (only for npm apps)
-    webContainer.on('server-ready', (port, url) => {
-        setTerminalOutput(prev => `${prev}\nServer ready on ${port}: ${url}\n`);
-        setIframeUrl(url);
-    });
-}
 
     return (
-        <main className="grid h-screen grid-cols-[360px_1fr] overflow-hidden bg-stone-100">
-            <section className="relative flex min-h-0 flex-col border-r border-stone-300 bg-white">
-                <header className="flex h-14 items-center justify-between border-b border-stone-200 px-3">
+        <main className="min-h-screen overflow-auto bg-stone-100 lg:grid lg:h-screen lg:grid-cols-[360px_1fr] lg:overflow-hidden">
+            <section className="relative flex min-h-[420px] flex-col border-r border-stone-300 bg-white lg:min-h-0">
+                <header className="flex h-14 shrink-0 items-center justify-between border-b border-stone-200 px-3">
                     <button
                         onClick={() => navigate('/')}
                         className="grid h-9 w-9 place-items-center rounded-md text-stone-700 hover:bg-stone-100"
@@ -355,7 +431,10 @@ const handleAddFile = () => {
                     >
                         <ArrowLeft size={18} />
                     </button>
-                    <h1 className="truncate px-2 text-sm font-semibold text-stone-950">{project?.name}</h1>
+                    <div className="min-w-0 px-2 text-center">
+                        <h1 className="truncate text-sm font-semibold text-stone-950">{project?.name}</h1>
+                        <p className="text-xs text-stone-500">{isOwner ? 'Owner access' : 'Member access'}</p>
+                    </div>
                     <button
                         onClick={() => setIsMemberPanelOpen(true)}
                         className="grid h-9 w-9 place-items-center rounded-md text-stone-700 hover:bg-stone-100"
@@ -366,7 +445,11 @@ const handleAddFile = () => {
                 </header>
 
                 <div ref={messageBoxRef} className="scrollbar-thin flex-1 space-y-3 overflow-auto p-3">
-                    {messages.map((msg, index) => {
+                    {messages.length === 0 ? (
+                        <div className="rounded-lg border border-dashed border-stone-300 bg-stone-50 p-4 text-sm text-stone-500">
+                            Start a project conversation or type @ai to request files.
+                        </div>
+                    ) : messages.map((msg, index) => {
                         const isOwn = msg.sender?._id === user?._id;
                         const isAi = msg.sender?._id === 'ai';
 
@@ -407,15 +490,21 @@ const handleAddFile = () => {
                         <div className="scrollbar-thin flex-1 overflow-auto p-3">
                             <button
                                 onClick={() => setIsCollaboratorModalOpen(true)}
-                                className="mb-3 inline-flex items-center gap-2 rounded-md bg-emerald-700 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-800"
+                                disabled={!isOwner}
+                                className="mb-3 inline-flex items-center gap-2 rounded-md bg-emerald-700 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-50"
+                                title={isOwner ? 'Add collaborator' : 'Only the owner can add collaborators'}
                             >
                                 <UserPlus size={17} />
                                 Add
                             </button>
+
                             <div className="space-y-2">
                                 {project?.users?.map(member => (
-                                    <div key={member._id} className="rounded-md border border-stone-200 bg-stone-50 px-3 py-2 text-sm text-stone-800">
-                                        {member.email}
+                                    <div key={member._id || member} className="flex items-center justify-between gap-3 rounded-md border border-stone-200 bg-stone-50 px-3 py-2 text-sm text-stone-800">
+                                        <span className="truncate">{member.email || member}</span>
+                                        {String(member._id || member) === ownerId && (
+                                            <span className="rounded bg-emerald-100 px-2 py-0.5 text-xs text-emerald-800">Owner</span>
+                                        )}
                                     </div>
                                 ))}
                             </div>
@@ -424,37 +513,36 @@ const handleAddFile = () => {
                 )}
             </section>
 
-            <section className="grid min-w-0 grid-cols-[240px_1fr] overflow-hidden">
+            <section className="grid min-h-[720px] min-w-0 grid-rows-[180px_1fr] overflow-hidden lg:min-h-0 lg:grid-cols-[240px_1fr] lg:grid-rows-none">
                 <aside className="flex min-h-0 flex-col border-r border-stone-300 bg-stone-200">
-                    <div className="flex h-12 items-center justify-between border-b border-stone-300 px-3">
+                    <div className="flex h-12 shrink-0 items-center justify-between border-b border-stone-300 px-3">
                         <div className="flex items-center gap-2 text-sm font-semibold text-stone-800">
                             <Folder size={17} />
                             Files
                         </div>
-                       <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2">
+                            <button
+                                onClick={handleAddFile}
+                                className="grid h-8 w-8 place-items-center rounded-md text-stone-700 hover:bg-stone-300"
+                                title="New File"
+                            >
+                                <FilePlus size={17} />
+                            </button>
 
-    {/* 📄➕ Add File */}
-    <button
-        onClick={handleAddFile}
-        className="grid h-8 w-8 place-items-center rounded-md text-stone-700 hover:bg-stone-300"
-        title="New File"
-    >
-        <FilePlus size={17} />
-    </button>
-
-    {/* ➕ Add Collaborator */}
-    <button
-        onClick={() => setIsCollaboratorModalOpen(true)}
-        className="grid h-8 w-8 place-items-center rounded-md text-stone-700 hover:bg-stone-300"
-        title="Add Collaborator"
-    >
-        <Plus size={17} />
-    </button>
-
-</div>
+                            <button
+                                onClick={() => setIsCollaboratorModalOpen(true)}
+                                disabled={!isOwner}
+                                className="grid h-8 w-8 place-items-center rounded-md text-stone-700 hover:bg-stone-300 disabled:cursor-not-allowed disabled:opacity-40"
+                                title={isOwner ? 'Add Collaborator' : 'Only the owner can add collaborators'}
+                            >
+                                <Plus size={17} />
+                            </button>
+                        </div>
                     </div>
                     <div className="scrollbar-thin flex-1 overflow-auto p-2">
-                        {fileNames.map(file => (
+                        {fileNames.length === 0 ? (
+                            <p className="rounded-md border border-dashed border-stone-300 bg-stone-100 p-3 text-sm text-stone-500">No files yet</p>
+                        ) : fileNames.map(file => (
                             <button
                                 key={file}
                                 onClick={() => openFile(file)}
@@ -489,7 +577,7 @@ const handleAddFile = () => {
                         </button>
                     </header>
 
-                    <div className="grid min-h-0 grid-cols-[minmax(0,1fr)_minmax(320px,40%)] overflow-hidden">
+                    <div className="grid min-h-0 grid-rows-[minmax(280px,1fr)_280px] overflow-hidden xl:grid-cols-[minmax(0,1fr)_minmax(320px,40%)] xl:grid-rows-none">
                         <div className="min-w-0 overflow-hidden">
                             {currentFile ? (
                                 <textarea
@@ -506,7 +594,7 @@ const handleAddFile = () => {
                                     className="h-full w-full resize-none bg-stone-950 p-4 font-mono text-sm leading-6 text-stone-50 outline-none"
                                 />
                             ) : (
-                                <div className="grid h-full place-items-center text-sm text-stone-500">No files yet</div>
+                                <div className="grid h-full place-items-center text-sm text-stone-500">Create or ask AI for a file</div>
                             )}
                         </div>
 
@@ -534,7 +622,8 @@ const handleAddFile = () => {
             </section>
 
             {error && (
-                <div className="fixed bottom-4 left-1/2 z-50 -translate-x-1/2 rounded-md bg-red-700 px-4 py-2 text-sm text-white shadow-lg">
+                <div className="fixed bottom-4 left-1/2 z-50 flex max-w-[calc(100vw-2rem)] -translate-x-1/2 items-center gap-2 rounded-md bg-red-700 px-4 py-2 text-sm text-white shadow-lg">
+                    <CircleAlert size={16} />
                     {error}
                 </div>
             )}
@@ -548,17 +637,25 @@ const handleAddFile = () => {
                                 <X size={18} />
                             </button>
                         </header>
-                        <div className="scrollbar-thin max-h-80 overflow-auto p-3">
-                            {users.map(nextUser => (
-                                <button
-                                    key={nextUser._id}
-                                    onClick={() => toggleSelectedUser(nextUser._id)}
-                                    className={`mb-2 block w-full rounded-md border px-3 py-2 text-left text-sm ${selectedUserIds.has(nextUser._id) ? 'border-emerald-500 bg-emerald-50 text-emerald-900' : 'border-stone-200 bg-white text-stone-800 hover:bg-stone-50'}`}
-                                >
-                                    {nextUser.email}
-                                </button>
-                            ))}
-                        </div>
+
+                        {!isOwner ? (
+                            <div className="p-4 text-sm text-stone-600">Only the project owner can add collaborators.</div>
+                        ) : (
+                            <div className="scrollbar-thin max-h-80 overflow-auto p-3">
+                                {eligibleUsers.length === 0 ? (
+                                    <p className="rounded-md border border-dashed border-stone-300 bg-stone-50 p-3 text-sm text-stone-500">No available users to add.</p>
+                                ) : eligibleUsers.map(nextUser => (
+                                    <button
+                                        key={nextUser._id}
+                                        onClick={() => toggleSelectedUser(nextUser._id)}
+                                        className={`mb-2 block w-full rounded-md border px-3 py-2 text-left text-sm ${selectedUserIds.has(nextUser._id) ? 'border-emerald-500 bg-emerald-50 text-emerald-900' : 'border-stone-200 bg-white text-stone-800 hover:bg-stone-50'}`}
+                                    >
+                                        {nextUser.email}
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+
                         <footer className="flex justify-end gap-2 border-t border-stone-200 p-3">
                             <button
                                 onClick={() => setIsCollaboratorModalOpen(false)}
@@ -568,9 +665,10 @@ const handleAddFile = () => {
                             </button>
                             <button
                                 onClick={addCollaborators}
-                                disabled={selectedUserIds.size === 0}
-                                className="rounded-md bg-emerald-700 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-800 disabled:opacity-60"
+                                disabled={!isOwner || selectedUserIds.size === 0 || savingMembers}
+                                className="inline-flex items-center gap-2 rounded-md bg-emerald-700 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-800 disabled:opacity-60"
                             >
+                                {savingMembers && <Loader2 className="animate-spin" size={15} />}
                                 Add
                             </button>
                         </footer>

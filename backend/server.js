@@ -13,10 +13,32 @@ const port = process.env.PORT || 3000;
 
 await connectDatabase();
 
+function getAllowedOrigins() {
+    const configuredOrigins = (process.env.CLIENT_URL || '')
+        .split(',')
+        .map(origin => origin.trim())
+        .filter(Boolean);
+
+    const deploymentOrigin = process.env.VERCEL_URL
+        ? `https://${process.env.VERCEL_URL}`
+        : null;
+
+    return [
+        ...configuredOrigins,
+        deploymentOrigin,
+        'http://localhost:5173',
+        'http://127.0.0.1:5173',
+    ].filter(Boolean);
+}
+
+const allowedOrigins = [
+    ...getAllowedOrigins(),
+];
+
 const server = http.createServer(app);
 const io = new Server(server, {
     cors: {
-        origin: process.env.CLIENT_URL || '*',
+        origin: allowedOrigins,
         credentials: true,
     },
 });
