@@ -28,6 +28,7 @@ function getAllowedOrigins() {
         deploymentOrigin,
         'http://localhost:5173',
         'http://127.0.0.1:5173',
+        'https://collab-serve-ai-fcn3.vercel.app'
     ].filter(Boolean);
 }
 
