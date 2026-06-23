@@ -27,7 +27,7 @@ export const register = async (req, res) => {
 
         res.status(201).json({ user: safeUser, token });
     } catch (error) {
-        res.status(400).json({  env : process.env});
+        res.status(500).json({ message : "Internal Server Error " });
     }
 };
 
