@@ -1,4 +1,6 @@
 import { GoogleGenAI } from '@google/genai';
+import { env } from '../config/env.js';
+import { badRequest } from '../lib/errors.js';
 
 const systemPrompt = `
 You are an expert AI developer inside a realtime MERN coding workspace.
@@ -45,34 +47,33 @@ function ensureJsonString(text) {
     const value = cleanJson(text);
 
     if (!value) {
-        throw new Error('AI returned empty response');
+        throw badRequest('AI returned empty response');
     }
 
     try {
         JSON.parse(value);
         return value;
     } catch {
-        console.error('Invalid JSON returned by AI:', value);
-
         const match = value.match(/\{[\s\S]*\}/);
+
         if (match) {
             try {
                 JSON.parse(match[ 0 ]);
                 return match[ 0 ];
             } catch {
-                // Fall through to the consistent invalid JSON error below.
+                // Fall through to invalid JSON error.
             }
         }
 
-        throw new Error('AI returned invalid JSON');
+        throw badRequest('AI returned invalid JSON');
     }
 }
 
 function safeGeminiError(error) {
-    const key = process.env.GEMINI_API_KEY || process.env.GOOGLE_AI_API_KEY || '';
+    const key = env.geminiApiKey || '';
     const rawMessage = error?.message || '';
 
-    console.error('Gemini request failed:', error);
+    console.error('Gemini request failed:', rawMessage);
 
     if (/api key was reported as leaked/i.test(rawMessage)) {
         return 'Gemini API key was blocked because Google reported it as leaked. Create a new key, update GEMINI_API_KEY in backend/.env, and restart the backend.';
@@ -90,19 +91,17 @@ function safeGeminiError(error) {
 }
 
 async function generateWithGemini(prompt) {
-    console.log("main upar hu" +process.env.GEMINI_API_KEY);
-    // console.log("second log " +  JSON.stringify(process.env)); 
-    const apiKey = process.env.GEMINI_API_KEY;
-    console.log(apiKey +  "main idhar hu bhencho"); 
+    const apiKey = env.geminiApiKey;
+
     if (!apiKey) {
-        throw new Error('Set GEMINI_API_KEY in backend/.env');
+        throw badRequest('Set GEMINI_API_KEY in backend/.env');
     }
 
     try {
         const ai = new GoogleGenAI({ apiKey });
 
         const response = await ai.models.generateContent({
-            model: process.env.GEMINI_MODEL || 'gemini-2.5-flash',
+            model: env.geminiModel,
             contents: [
                 {
                     role: 'user',
@@ -125,14 +124,18 @@ async function generateWithGemini(prompt) {
 
         return ensureJsonString(extractGeminiText(response));
     } catch (error) {
-        throw new Error(safeGeminiError(error));
+        if (error.isOperational) {
+            throw error;
+        }
+
+        throw badRequest(safeGeminiError(error));
     }
 }
 
-export const generateResult = async prompt => {
+export async function generateResult(prompt) {
     if (!prompt?.trim()) {
-        throw new Error('Prompt is required');
+        throw badRequest('Prompt is required');
     }
 
     return generateWithGemini(prompt.trim());
-};
+}

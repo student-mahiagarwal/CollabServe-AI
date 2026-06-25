@@ -1,33 +1,60 @@
+# Dependencies
 node_modules/
+**/node_modules/
+
+# Build outputs
 dist/
 build/
+**/dist/
+.vite/
 
+# Environment & secrets (keep example templates)
 .env
-.env.local
-.env.*.local
-backend/.env
-frontend/.env
+.env.*
+!.env.example
+!**/.env.example
 
-frontend/node_modules
-frontend/dist
+# Credentials
+credentials.json
+*.pem
+*.key
+service-account*.json
 
+# Logs
+logs/
 *.log
 *.err.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
-
-.DS_Store
-Thumbs.db
-
-.vscode/
-.idea/
-
-coverage/
-.nyc_output/
-
 backend-dev*.log
 backend-dev*.err.log
 frontend-dev*.log
 frontend-dev*.err.log
+
+# Test & coverage
+coverage/
+.nyc_output/
+
+# Caches
+.cache/
+.eslintcache
+*.tsbuildinfo
+
+# Deployment
+.vercel/
+
+# OS
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*~
+
+# Runtime
+*.pid

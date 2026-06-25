@@ -1,4 +1,5 @@
 import Redis from 'ioredis';
+import { env } from '../config/env.js';
 
 const memoryStore = new Map();
 
@@ -39,16 +40,16 @@ function createRedisClient() {
         retryStrategy: () => null,
     };
 
-    if (process.env.REDIS_URL) {
-        return new Redis(process.env.REDIS_URL, options);
+    if (env.redisUrl) {
+        return new Redis(env.redisUrl, options);
     }
 
-    if (process.env.REDIS_HOST && process.env.REDIS_PORT) {
+    if (env.redisHost && env.redisPort) {
         return new Redis({
             ...options,
-            host: process.env.REDIS_HOST,
-            port: Number(process.env.REDIS_PORT),
-            password: process.env.REDIS_PASSWORD || undefined,
+            host: env.redisHost,
+            port: Number(env.redisPort),
+            password: env.redisPassword || undefined,
         });
     }
 
@@ -82,7 +83,7 @@ const redisClient = {
 
         try {
             return await redis.get(key);
-        } catch (error) {
+        } catch {
             return fallback.get(key);
         }
     },
@@ -93,7 +94,7 @@ const redisClient = {
 
         try {
             return await redis.set(key, value, mode, ttl);
-        } catch (error) {
+        } catch {
             return fallback.set(key, value, mode, ttl);
         }
     },

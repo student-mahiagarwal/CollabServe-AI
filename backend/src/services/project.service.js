@@ -1,15 +1,10 @@
-import mongoose from 'mongoose';
 import projectModel from '../models/project.model.js';
+import { assertObjectId } from '../lib/objectId.js';
+import { badRequest, conflict, forbidden, notFound } from '../lib/errors.js';
 
-function assertObjectId(id, name) {
-    if (!id || !mongoose.Types.ObjectId.isValid(id)) {
-        throw new Error(`Invalid ${name}`);
-    }
-}
-
-export const createProject = async ({ name, userId }) => {
+export async function createProject({ name, userId }) {
     if (!name?.trim()) {
-        throw new Error('Project name is required');
+        throw badRequest('Project name is required');
     }
 
     assertObjectId(userId, 'userId');
@@ -22,30 +17,28 @@ export const createProject = async ({ name, userId }) => {
         });
     } catch (error) {
         if (error.code === 11000) {
-            throw new Error('You already have a project with this name');
+            throw conflict('You already have a project with this name');
         }
 
         throw error;
     }
-};
+}
 
-export const getAllProjectsByUserId = async ({ userId }) => {
+export async function getAllProjectsByUserId({ userId }) {
     assertObjectId(userId, 'userId');
 
     return projectModel.find({ users: userId }).sort({ updatedAt: -1 });
-};
+}
 
-export const addUsersToProject = async ({ projectId, users, userId }) => {
+export async function addUsersToProject({ projectId, users, userId }) {
     assertObjectId(projectId, 'projectId');
     assertObjectId(userId, 'userId');
 
     if (!Array.isArray(users) || users.length === 0) {
-        throw new Error('Users must be a non-empty array');
+        throw badRequest('Users must be a non-empty array');
     }
 
-    if (users.some(id => !mongoose.Types.ObjectId.isValid(id))) {
-        throw new Error('Invalid userId in users array');
-    }
+    users.forEach(id => assertObjectId(id, 'userId'));
 
     const project = await projectModel.findOne({
         _id: projectId,
@@ -53,13 +46,11 @@ export const addUsersToProject = async ({ projectId, users, userId }) => {
     });
 
     if (!project) {
-        throw new Error('User does not belong to this project');
+        throw notFound('Project not found');
     }
 
     if (project.owner.toString() !== userId.toString()) {
-        const error = new Error('Only the project owner can add collaborators');
-        error.status = 403;
-        throw error;
+        throw forbidden('Only the project owner can add collaborators');
     }
 
     return projectModel
@@ -69,9 +60,9 @@ export const addUsersToProject = async ({ projectId, users, userId }) => {
             { new: true }
         )
         .populate('users', 'email');
-};
+}
 
-export const getProjectById = async ({ projectId, userId }) => {
+export async function getProjectById({ projectId, userId }) {
     assertObjectId(projectId, 'projectId');
     assertObjectId(userId, 'userId');
 
@@ -80,18 +71,18 @@ export const getProjectById = async ({ projectId, userId }) => {
         .populate('users', 'email');
 
     if (!project) {
-        throw new Error('Project not found');
+        throw notFound('Project not found');
     }
 
     return project;
-};
+}
 
-export const updateFileTree = async ({ projectId, userId, fileTree }) => {
+export async function updateFileTree({ projectId, userId, fileTree }) {
     assertObjectId(projectId, 'projectId');
     assertObjectId(userId, 'userId');
 
     if (!fileTree || typeof fileTree !== 'object' || Array.isArray(fileTree)) {
-        throw new Error('File tree is required');
+        throw badRequest('File tree is required');
     }
 
     const project = await projectModel
@@ -103,8 +94,8 @@ export const updateFileTree = async ({ projectId, userId, fileTree }) => {
         .populate('users', 'email');
 
     if (!project) {
-        throw new Error('Project not found');
+        throw notFound('Project not found');
     }
 
     return project;
-};
+}

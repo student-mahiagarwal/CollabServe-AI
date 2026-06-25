@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
+import { AppError } from '../lib/errors.js';
 
 const userSchema = new mongoose.Schema(
     {
@@ -34,7 +35,7 @@ userSchema.methods.isValidPassword = function isValidPassword(password) {
 
 userSchema.methods.generateJWT = function generateJWT() {
     if (!process.env.JWT_SECRET) {
-        throw new Error('JWT_SECRET is required in backend/.env');
+        throw new AppError('JWT_SECRET is required in backend/.env', 500, 'CONFIG_ERROR');
     }
 
     return jwt.sign(
@@ -45,6 +46,12 @@ userSchema.methods.generateJWT = function generateJWT() {
         process.env.JWT_SECRET,
         { expiresIn: '24h' }
     );
+};
+
+userSchema.methods.toSafeObject = function toSafeObject() {
+    const user = this.toObject();
+    delete user.password;
+    return user;
 };
 
 const User = mongoose.model('user', userSchema);

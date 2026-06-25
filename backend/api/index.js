@@ -1,6 +1,6 @@
 import mongoose from 'mongoose';
-import app from '../app.js';
-import connectDatabase from '../db/db.js';
+import app from '../src/app.js';
+import connectDatabase from '../src/db/db.js';
 
 let connectionPromise;
 
