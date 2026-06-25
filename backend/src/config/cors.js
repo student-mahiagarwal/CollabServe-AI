@@ -25,7 +25,7 @@ export function getAllowedOrigins() {
 }
 
 export function createCorsOptions() {
-    const allowedOrigins = new Set(getAllowedOrigins());
+    const allowedOrigins = new Set(getAllowedOrigins(), 'https://collab-serve-ai.vercel.app');
 
     return {
         origin(origin, callback) {

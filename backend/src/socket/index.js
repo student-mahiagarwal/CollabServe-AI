@@ -6,7 +6,7 @@ import { registerProjectMessageHandler } from './handlers/project-message.handle
 export function createSocketServer(httpServer) {
     const io = new Server(httpServer, {
         cors: {
-            origin: getAllowedOrigins(),
+            origin: [...getAllowedOrigins(), 'https://collab-serve-ai.vercel.app'],
             credentials: true,
         },
     });
