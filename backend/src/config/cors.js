@@ -5,31 +5,42 @@ const LOCAL_ORIGINS = [
     'http://127.0.0.1:5173',
 ];
 
+const DEPLOYMENT_ORIGINS = [
+    'https://collab-serve-ai.vercel.app',
+];
+
+function normalizeOrigin(origin) {
+    return origin?.trim().replace(/\/+$/, '') || '';
+}
+
 export function getAllowedOrigins() {
     const configuredOrigins = env.clientUrl
         .split(',')
-        .map(origin => origin.trim())
+        .map(normalizeOrigin)
         .filter(Boolean);
 
     const deploymentOrigin = env.vercelUrl
-        ? `https://${env.vercelUrl}`
+        ? normalizeOrigin(`https://${env.vercelUrl}`)
         : null;
 
     return [
         ...new Set([
             ...configuredOrigins,
             ...LOCAL_ORIGINS,
+            ...DEPLOYMENT_ORIGINS,
             deploymentOrigin,
         ].filter(Boolean)),
     ];
 }
 
 export function createCorsOptions() {
-    const allowedOrigins = new Set(getAllowedOrigins(), 'https://collab-serve-ai.vercel.app');
+    const allowedOrigins = new Set(getAllowedOrigins());
 
     return {
         origin(origin, callback) {
-            if (!origin || allowedOrigins.has(origin)) {
+            const normalizedOrigin = normalizeOrigin(origin);
+
+            if (!normalizedOrigin || allowedOrigins.has(normalizedOrigin)) {
                 return callback(null, true);
             }
 
