@@ -113,7 +113,8 @@ io.on('connection', socket => {
         try {
             const prompt = message.replace('@ai', '').trim();
             const result = await generateResult(prompt);
-
+            // error kaah pe aa rha hai socket se baat karne mein ?? 
+            // site ko chla se dekho same whi to auth ke time p aa raha tha
             io.to(roomId).emit('project-message', {
                 message: result,
                 sender: {

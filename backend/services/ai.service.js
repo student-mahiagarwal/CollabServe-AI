@@ -90,8 +90,10 @@ function safeGeminiError(error) {
 }
 
 async function generateWithGemini(prompt) {
-    const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_AI_API_KEY;
-
+    console.log("main upar hu" +process.env.GEMINI_API_KEY);
+    // console.log("second log " +  JSON.stringify(process.env)); 
+    const apiKey = process.env.GEMINI_API_KEY;
+    console.log(apiKey +  "main idhar hu bhencho"); 
     if (!apiKey) {
         throw new Error('Set GEMINI_API_KEY in backend/.env');
     }
