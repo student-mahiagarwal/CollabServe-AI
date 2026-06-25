@@ -1,4 +1,5 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+import ErrorBoundary from '../components/ErrorBoundary.jsx';
 import { useUser } from '../context/UserContext.jsx';
 import Login from '../screens/Login.jsx';
 import Register from '../screens/Register.jsx';
@@ -29,7 +30,9 @@ export default function AppRoutes() {
                     path="/"
                     element={(
                         <ProtectedRoute>
-                            <Home />
+                            <ErrorBoundary>
+                                <Home />
+                            </ErrorBoundary>
                         </ProtectedRoute>
                     )}
                 />
@@ -37,7 +40,9 @@ export default function AppRoutes() {
                     path="/project/:projectId"
                     element={(
                         <ProtectedRoute>
-                            <Project />
+                            <ErrorBoundary>
+                                <Project />
+                            </ErrorBoundary>
                         </ProtectedRoute>
                     )}
                 />

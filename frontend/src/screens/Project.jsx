@@ -1,11 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import Markdown from 'markdown-to-jsx';
-import hljs from 'highlight.js';
 import {
     ArrowLeft,
     Bot,
-    CircleAlert,
     FilePlus,
     Folder,
     Loader2,
@@ -20,6 +17,10 @@ import axios from '../config/axios.js';
 import { disconnectSocket, initializeSocket, isRealtimeEnabled, receiveMessage, sendMessage } from '../config/socket.js';
 import { getWebContainer } from '../config/webcontainer.js';
 import { useUser } from '../context/UserContext.jsx';
+import AiMessage from '../components/AiMessage.jsx';
+import ErrorBanner from '../components/ErrorBanner.jsx';
+import { getApiErrorMessage } from '../lib/apiError.js';
+import { parseAiMessage } from '../lib/aiMessage.js';
 
 function getFileContent(fileTree, fileName) {
     return fileTree?.[ fileName ]?.file?.contents || '';
@@ -57,36 +58,6 @@ function getOwnerId(project) {
     return project?.owner?._id || project?.owner || '';
 }
 
-function CodeBlock(props) {
-    const ref = useRef(null);
-
-    useEffect(() => {
-        if (ref.current) {
-            hljs.highlightElement(ref.current);
-        }
-    }, [ props.children ]);
-
-    return <code {...props} ref={ref} />;
-}
-
-function AiMessage({ message }) {
-    let parsed = null;
-
-    try {
-        parsed = JSON.parse(message);
-    } catch {
-        parsed = { text: message };
-    }
-
-    return (
-        <div className="prose prose-sm max-w-none prose-pre:bg-stone-950 prose-pre:text-stone-50">
-            <Markdown options={{ overrides: { code: CodeBlock } }}>
-                {parsed.text || message}
-            </Markdown>
-        </div>
-    );
-}
-
 export default function Project() {
     const { projectId } = useParams();
     const { user } = useUser();
@@ -109,6 +80,7 @@ export default function Project() {
     const [ terminalOutput, setTerminalOutput ] = useState('');
     const [ loading, setLoading ] = useState(true);
     const [ savingMembers, setSavingMembers ] = useState(false);
+    const [ aiLoading, setAiLoading ] = useState(false);
     const [ error, setError ] = useState('');
 
     const fileNames = useMemo(() => Object.keys(fileTree), [ fileTree ]);
@@ -139,11 +111,12 @@ export default function Project() {
                 fileTree: nextFileTree,
             });
         } catch (err) {
-            setError(err.response?.data?.error || 'Could not save files');
+            setError(getApiErrorMessage(err, 'Could not save files'));
         }
     }, [ projectId ]);
 
     const applyAiResult = useCallback(result => {
+        const parsed = parseAiMessage(result);
         const aiMessage = {
             message: result,
             sender: {
@@ -151,28 +124,28 @@ export default function Project() {
                 email: 'AI',
             },
             createdAt: new Date().toISOString(),
+            isError: parsed.type === 'error',
         };
 
         setMessages(prev => [ ...prev, aiMessage ]);
+        setAiLoading(false);
 
-        try {
-            const parsed = JSON.parse(result);
+        if (parsed.type === 'error') {
+            return;
+        }
 
-            if (parsed.fileTree && Object.keys(parsed.fileTree).length > 0) {
-                setFileTree(prev => {
-                    const nextTree = { ...prev, ...parsed.fileTree };
-                    saveFileTree(nextTree);
+        if (parsed.fileTree && Object.keys(parsed.fileTree).length > 0) {
+            setFileTree(prev => {
+                const nextTree = { ...prev, ...parsed.fileTree };
+                saveFileTree(nextTree);
 
-                    const nextFirstFile = Object.keys(parsed.fileTree)[ 0 ];
-                    if (nextFirstFile) {
-                        openFile(nextFirstFile);
-                    }
+                const nextFirstFile = Object.keys(parsed.fileTree)[ 0 ];
+                if (nextFirstFile) {
+                    openFile(nextFirstFile);
+                }
 
-                    return nextTree;
-                });
-            }
-        } catch (parseError) {
-            console.warn(parseError);
+                return nextTree;
+            });
         }
     }, [ openFile, saveFileTree ]);
 
@@ -238,7 +211,7 @@ export default function Project() {
                     .then(setWebContainer)
                     .catch(err => setTerminalOutput(`WebContainer failed: ${err.message}`));
             } catch (err) {
-                setError(err.response?.data?.error || 'Could not load project');
+                setError(getApiErrorMessage(err, 'Could not load project'));
             } finally {
                 setLoading(false);
             }
@@ -255,7 +228,7 @@ export default function Project() {
         if (messageBoxRef.current) {
             messageBoxRef.current.scrollTop = messageBoxRef.current.scrollHeight;
         }
-    }, [ messages ]);
+    }, [ messages, aiLoading ]);
 
     function toggleSelectedUser(id) {
         setSelectedUserIds(prev => {
@@ -290,7 +263,7 @@ export default function Project() {
             setSelectedUserIds(new Set());
             setIsCollaboratorModalOpen(false);
         } catch (err) {
-            setError(err.response?.data?.error || 'Could not add collaborators');
+            setError(getApiErrorMessage(err, 'Could not add collaborators'));
         } finally {
             setSavingMembers(false);
         }
@@ -311,19 +284,25 @@ export default function Project() {
 
         const deliveredRealtime = sendMessage('project-message', nextMessage);
         setMessages(prev => [ ...prev, nextMessage ]);
+        const currentMessage = message;
         setMessage('');
 
-        if (!deliveredRealtime && message.includes('@ai')) {
+        const isAiPrompt = currentMessage.includes('@ai');
+        if (isAiPrompt) {
+            setAiLoading(true);
+        }
+
+        if (!deliveredRealtime && isAiPrompt) {
             try {
-                const prompt = message.replace('@ai', '').trim();
+                const prompt = currentMessage.replace('@ai', '').trim();
                 const res = await axios.post('/ai/get-result', { prompt });
                 applyAiResult(res.data.result);
             } catch (err) {
-                const fallback = JSON.stringify({
-                    text: err.response?.data?.error || 'AI request failed. Please check the backend configuration.',
+                applyAiResult(JSON.stringify({
+                    text: getApiErrorMessage(err, 'AI request failed. Please try again.'),
                     fileTree: {},
-                });
-                applyAiResult(fallback);
+                    isError: true,
+                }));
             }
         }
     }
@@ -452,11 +431,13 @@ export default function Project() {
                     ) : messages.map((msg, index) => {
                         const isOwn = msg.sender?._id === user?._id;
                         const isAi = msg.sender?._id === 'ai';
+                        const aiParsed = isAi ? parseAiMessage(msg.message) : null;
+                        const isAiError = isAi && (msg.isError || aiParsed?.type === 'error');
 
                         return (
                             <div key={`${msg.createdAt}-${index}`} className={`flex ${isOwn ? 'justify-end' : 'justify-start'}`}>
-                                <div className={`max-w-[82%] rounded-lg border px-3 py-2 text-sm shadow-sm ${isAi ? 'border-emerald-200 bg-emerald-50' : isOwn ? 'border-stone-900 bg-stone-900 text-white' : 'border-stone-200 bg-stone-50 text-stone-900'}`}>
-                                    <div className="mb-1 flex items-center gap-1.5 text-xs opacity-70">
+                                <div className={`max-w-[82%] rounded-lg border px-3 py-2 text-sm shadow-sm ${isAiError ? 'border-red-200 bg-red-50' : isAi ? 'border-emerald-200 bg-emerald-50' : isOwn ? 'border-stone-900 bg-stone-900 text-white' : 'border-stone-200 bg-stone-50 text-stone-900'}`}>
+                                    <div className={`mb-1 flex items-center gap-1.5 text-xs ${isAiError ? 'text-red-700' : 'opacity-70'}`}>
                                         {isAi && <Bot size={13} />}
                                         <span>{msg.sender?.email}</span>
                                     </div>
@@ -465,6 +446,20 @@ export default function Project() {
                             </div>
                         );
                     })}
+                    {aiLoading && (
+                        <div className="flex justify-start">
+                            <div className="max-w-[82%] rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm shadow-sm">
+                                <div className="mb-1 flex items-center gap-1.5 text-xs text-emerald-800">
+                                    <Bot size={13} />
+                                    <span>AI</span>
+                                </div>
+                                <div className="flex items-center gap-2 text-sm text-emerald-800">
+                                    <Loader2 className="animate-spin" size={16} />
+                                    Thinking...
+                                </div>
+                            </div>
+                        </div>
+                    )}
                 </div>
 
                 <form onSubmit={submitMessage} className="flex border-t border-stone-200 p-3">
@@ -621,12 +616,7 @@ export default function Project() {
                 </div>
             </section>
 
-            {error && (
-                <div className="fixed bottom-4 left-1/2 z-50 flex max-w-[calc(100vw-2rem)] -translate-x-1/2 items-center gap-2 rounded-md bg-red-700 px-4 py-2 text-sm text-white shadow-lg">
-                    <CircleAlert size={16} />
-                    {error}
-                </div>
-            )}
+            <ErrorBanner message={error} onDismiss={() => setError('')} />
 
             {isCollaboratorModalOpen && (
                 <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 px-4">

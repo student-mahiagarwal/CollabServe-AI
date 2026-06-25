@@ -1,4 +1,5 @@
 import { generateResult } from '../../services/ai.service.js';
+import { formatAiErrorPayload } from '../../lib/ai-response.js';
 
 function buildMessagePayload(message, sender, createdAt = new Date().toISOString()) {
     return {
@@ -16,10 +17,7 @@ function buildAiSender() {
 }
 
 function buildAiErrorMessage(error) {
-    return JSON.stringify({
-        text: error.message || 'AI request failed. Please check the backend configuration.',
-        fileTree: {},
-    });
+    return formatAiErrorPayload(error.message || 'AI request failed. Please try again.');
 }
 
 export function registerProjectMessageHandler(io, socket) {

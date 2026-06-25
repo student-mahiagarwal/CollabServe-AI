@@ -1,6 +1,7 @@
 import { GoogleGenAI } from '@google/genai';
 import { env } from '../config/env.js';
 import { badRequest } from '../lib/errors.js';
+import { assertValidAiPayload, humanizeAiError } from '../lib/ai-response.js';
 
 const systemPrompt = `
 You are an expert AI developer inside a realtime MERN coding workspace.
@@ -51,17 +52,25 @@ function ensureJsonString(text) {
     }
 
     try {
-        JSON.parse(value);
+        const parsed = JSON.parse(value);
+        assertValidAiPayload(parsed);
         return value;
-    } catch {
+    } catch (error) {
+        if (error.isOperational) {
+            throw error;
+        }
+
         const match = value.match(/\{[\s\S]*\}/);
 
         if (match) {
             try {
-                JSON.parse(match[ 0 ]);
+                const parsed = JSON.parse(match[ 0 ]);
+                assertValidAiPayload(parsed);
                 return match[ 0 ];
-            } catch {
-                // Fall through to invalid JSON error.
+            } catch (nestedError) {
+                if (nestedError.isOperational) {
+                    throw nestedError;
+                }
             }
         }
 
@@ -75,19 +84,12 @@ function safeGeminiError(error) {
 
     console.error('Gemini request failed:', rawMessage);
 
-    if (/api key was reported as leaked/i.test(rawMessage)) {
-        return 'Gemini API key was blocked because Google reported it as leaked. Create a new key, update GEMINI_API_KEY in backend/.env, and restart the backend.';
-    }
-
-    if (/permission_denied|api key/i.test(rawMessage)) {
-        return 'Gemini API key is invalid or does not have permission. Update GEMINI_API_KEY in backend/.env and restart the backend.';
-    }
-
-    const redactedMessage = rawMessage
-        .replaceAll(key, '[redacted]')
-        .replace(/AIza[0-9A-Za-z_-]+/g, '[redacted]');
-
-    return redactedMessage || 'Gemini request failed.';
+    return humanizeAiError(
+        rawMessage
+            .replaceAll(key, '[redacted]')
+            .replace(/AIza[0-9A-Za-z_-]+/g, '[redacted]'),
+        error?.status || error?.code
+    );
 }
 
 async function generateWithGemini(prompt) {
