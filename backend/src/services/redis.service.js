@@ -100,4 +100,16 @@ const redisClient = {
     },
 };
 
+export async function closeRedis() {
+    if (!redis) {
+        return;
+    }
+
+    try {
+        await redis.quit();
+    } catch {
+        redis.disconnect();
+    }
+}
+
 export default redisClient;

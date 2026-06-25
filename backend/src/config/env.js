@@ -20,7 +20,7 @@ export const env = {
     mongodbUri: optionalEnv('MONGODB_URI'),
     jwtSecret: optionalEnv('JWT_SECRET'),
     geminiApiKey: optionalEnv('GEMINI_API_KEY') || optionalEnv('GOOGLE_AI_API_KEY'),
-    geminiModel: optionalEnv('GEMINI_MODEL', 'gemini-2.5-flash'),
+    geminiModel: optionalEnv('GEMINI_MODEL', 'gemini-2.5-flash-preview'),
     redisUrl: optionalEnv('REDIS_URL'),
     redisHost: optionalEnv('REDIS_HOST'),
     redisPort: optionalEnv('REDIS_PORT'),
